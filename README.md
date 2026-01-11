@@ -1,9 +1,8 @@
-# <img width="36" height="36" alt="非常满意" src="https://github.com/user-attachments/assets/2b949fae-4de6-4c63-9465-e80d6663f2a6" />活着呢 
+# <img width="36" height="36" alt="非常满意" src="https://github.com/user-attachments/assets/2b949fae-4de6-4c63-9465-e80d6663f2a6" />活着呢 （对标死了么APP）
 
 
 这是一个简单、轻量的每日签到 Web 应用，专为局域网或个人服务器部署设计。它支持多用户管理、微信/邮件通知提醒，以及长时间未签到自动清理功能。
 
-项目名称：**活着呢**
 
 ## 主要功能
 - 连续签到天数统计
