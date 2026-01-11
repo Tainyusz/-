@@ -2,7 +2,7 @@
 
 
 这是一个简单、轻量的每日签到 Web 应用，专为局域网或个人服务器部署设计。它支持多用户管理、微信/邮件通知提醒，以及长时间未签到自动清理功能。
-<img width="256" height="256" alt="非常满意" src="https://github.com/user-attachments/assets/2b949fae-4de6-4c63-9465-e80d6663f2a6" />
+<img width="28" height="28" alt="非常满意" src="https://github.com/user-attachments/assets/2b949fae-4de6-4c63-9465-e80d6663f2a6" />
 项目名称：**活着呢**
 
 ## 主要功能
