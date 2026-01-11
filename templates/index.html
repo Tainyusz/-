@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>活着呢</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="manifest" href="/static/manifest.json">
+    <meta name="theme-color" content="#ffffff">
+    
+    <!-- iOS PWA 适配 -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="活着呢">
+    
+    <link rel="apple-touch-icon" href="/static/icon-192.png">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="input-group centered-input">
+                <input type="text" placeholder="你的姓名" id="username" class="editable-input">
+                <span class="edit-icon">✎</span>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="circle-container">
+                <div class="pulse-ring"></div>
+                <div class="check-in-btn" id="checkInBtn">
+                    <div class="icon">
+                        <img src="/static/manyi.png" alt="Check-in" class="main-icon-img">
+                    </div>
+                    <span class="btn-text">活着呢</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <div class="notification-btns">
+                <button class="notify-btn" id="wechatNotify">
+                    <img src="/static/weixin.png" alt="WeChat" class="btn-icon-img"> 微信通知
+                </button>
+                <button class="notify-btn" id="emailNotify">
+                    <img src="/static/Email.png" alt="Email" class="btn-icon-img"> 邮件通知
+                </button>
+            </div>
+            <p class="notification-hint">2天没有签到，系统将会发起通知</p>
+            <button id="deleteUserBtn" class="delete-user-btn">我悟了</button>
+        </div>
+    </div>
+    
+    <!-- 模态框：微信通知配置 -->
+    <div id="wechatModal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn">&times;</span>
+            <h3>配置微信通知</h3>
+            <p>请输入企业微信 Webhook 地址（多个地址请用英文逗号隔开）：</p>
+            <textarea id="wechatWebhookInput" placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=..." style="width: 100%; height: 80px; padding: 10px; margin: 10px 0; border: 1px solid #ccc; border-radius: 4px; resize: none;"></textarea>
+            <div style="display: flex; gap: 10px;">
+                <button id="testWechatBtn" class="save-btn" style="background-color: #555; width: 40%;">测试发送</button>
+                <button id="saveWechatBtn" class="save-btn" style="width: 60%;">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 模态框：邮件通知配置 -->
+    <div id="emailModal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn">&times;</span>
+            <h3>配置邮件通知</h3>
+            <p>请输入邮箱地址（多个邮箱请用英文逗号隔开）：</p>
+            <input type="text" id="emailInput" placeholder="example@test.com, admin@test.com" style="width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ccc; border-radius: 4px;">
+            <div style="display: flex; gap: 10px;">
+                <button id="testEmailBtn" class="save-btn" style="background-color: #555; width: 40%;">测试发送</button>
+                <button id="saveEmailBtn" class="save-btn" style="width: 60%;">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 模态框：我悟了 -->
+    <div id="enlightenmentModal" class="modal">
+        <div class="modal-content enlightenment-card">
+            <span class="close-btn">&times;</span>
+            <div class="quote-container">
+                <p id="quoteText" class="quote-text"></p>
+            </div>
+            <button id="confirmDeleteBtn" class="delete-confirm-btn">删除所有账号数据</button>
+        </div>
+    </div>
+
+    <script>
+        // 生成UUID v4
+        function generateUUID() {
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                const r = Math.random() * 16 | 0;
+                const v = c === 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+        }
+
+        // 获取或生成设备ID
+        function getDeviceId() {
+            let deviceId = localStorage.getItem('checkin_device_id');
+            if (!deviceId) {
+                deviceId = generateUUID();
+                localStorage.setItem('checkin_device_id', deviceId);
+            }
+            return deviceId;
+        }
+
+        // 状态管理
+        let currentUserConfig = {
+            id: null,
+            nickname: '',
+            device_id: getDeviceId(), // 添加设备ID
+            wechat_webhook: '',
+            emails: '',
+            check_in_days: 0,
+            is_checked_in: false
+        };
+
+        const checkInBtn = document.getElementById('checkInBtn');
+        const iconImg = checkInBtn.querySelector('.main-icon-img');
+        const btnText = checkInBtn.querySelector('.btn-text');
+        const nicknameInput = document.getElementById('username');
+        const deleteUserBtn = document.getElementById('deleteUserBtn');
+        
+        // 模态框元素
+        const wechatModal = document.getElementById('wechatModal');
+        const emailModal = document.getElementById('emailModal');
+        const enlightenmentModal = document.getElementById('enlightenmentModal'); // 新增
+        const wechatBtn = document.getElementById('wechatNotify');
+        const emailBtn = document.getElementById('emailNotify');
+        const closeBtns = document.querySelectorAll('.close-btn');
+        const saveWechatBtn = document.getElementById('saveWechatBtn');
+        const saveEmailBtn = document.getElementById('saveEmailBtn');
+        const testWechatBtn = document.getElementById('testWechatBtn'); // 新增
+        const testEmailBtn = document.getElementById('testEmailBtn'); // 新增
+        const wechatWebhookInput = document.getElementById('wechatWebhookInput');
+        const emailInput = document.getElementById('emailInput');
+        const quoteText = document.getElementById('quoteText'); // 新增
+        const confirmDeleteBtn = document.getElementById('confirmDeleteBtn'); // 新增
+
+        // 金句列表
+        const quotes = [
+            "悟不是多了一个答案，而是少了许多非要答案的焦虑。",
+            "你以为悟了，其实只是明白：有些痛不该恨，有些人不必留。",
+            "悟不是拥有更多，而是愿意失去一些不再适合自己的东西。",
+            "最深的悟，是一句“我悟了”也不需要，只剩下安静地活。"
+        ];
+
+        // 初始化加载
+        window.addEventListener('load', async () => {
+            // 锁定容器高度，防止软键盘弹出时布局变形
+            const container = document.querySelector('.container');
+            container.style.height = window.innerHeight + 'px';
+            
+            // 监听窗口大小变化（主要针对横竖屏切换，软键盘弹出时宽度通常不变）
+            let lastWidth = window.innerWidth;
+            window.addEventListener('resize', () => {
+                if (window.innerWidth !== lastWidth) {
+                    container.style.height = window.innerHeight + 'px';
+                    lastWidth = window.innerWidth;
+                }
+            });
+
+            // 检查本地存储
+            const storedUserId = localStorage.getItem('checkin_user_id');
+            const storedNickname = localStorage.getItem('checkin_nickname');
+            
+            if (storedUserId && storedNickname) {
+                currentUserConfig.id = storedUserId;
+                currentUserConfig.nickname = storedNickname;
+                nicknameInput.value = storedNickname;
+                await fetchConfig();
+            } else {
+                // 如果没有登录，提示输入昵称（这里为了简化，直接依赖用户在输入框输入并失焦，或者点击签到时触发登录）
+                // 为了更好的体验，可以在这里不做任何事，等用户输入昵称。
+                // 但要禁用其他操作直到有用户ID
+                nicknameInput.focus();
+            }
+        });
+
+        // 登录/获取用户ID
+        async function loginUser(nickname) {
+            if (!nickname) return;
+            try {
+                const res = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        nickname: nickname,
+                        device_id: currentUserConfig.device_id
+                    })
+                });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    currentUserConfig.id = data.user_id;
+                    currentUserConfig.nickname = data.nickname;
+                    localStorage.setItem('checkin_user_id', data.user_id);
+                    localStorage.setItem('checkin_nickname', data.nickname);
+
+                    // 登录成功后，获取该用户的详细配置
+                    await fetchConfig();
+                    return true;
+                }
+            } catch (e) {
+                console.error('Login failed', e);
+                return false;
+            }
+        }
+
+        // 获取配置
+        async function fetchConfig() {
+            if (!currentUserConfig.id) return;
+            
+            try {
+                const res = await fetch(`/api/config?user_id=${currentUserConfig.id}`);
+                const data = await res.json();
+                
+                // 填充数据
+                // nicknameInput.value = data.nickname; 
+                // 隐私保护：不再回显敏感配置，用户如果想改，需要重新输入
+                // wechatWebhookInput.value = data.wechat_webhook;
+                // emailInput.value = data.emails;
+                
+                // currentUserConfig.wechat_webhook = data.wechat_webhook; // 后端不返回了
+                // currentUserConfig.emails = data.emails; // 后端不返回了
+                // 但为了前端逻辑（比如签到校验），我们需要知道用户是否配置了。
+                // 可以在后端返回一个 boolean 标识吗？或者我们简单地假设：如果签到成功，就是有配置？
+                // 暂时方案：后端不返回内容，前端这里就当作未知，或者需要后端返回 has_wechat, has_email 标识。
+                // 鉴于目前逻辑依赖 currentUserConfig.wechat_webhook 来判断是否可以签到，我们需要调整签到校验逻辑。
+                // 更好的方式：后端返回 masked 数据？或者返回 has_wechat=true/false
+                // 由于后端改动已完成（不返回字段），这里前端先把本地存的清空，避免误导。
+                
+                currentUserConfig.check_in_days = data.check_in_days;
+                currentUserConfig.is_checked_in = data.is_checked_in;
+                
+                // 为了让“测试”按钮和“签到”按钮能工作，我们需要知道用户到底配没配。
+                // 既然后端不返回，前端就没法校验了。
+                // 现在的策略是：前端不再严格校验“是否配置”，而是交给后端去报错。
+                // 或者，用户点击签到时，直接发请求，后端返回“未配置”错误。
+                // 这样就不需要前端知道具体的配置内容了。
+                
+                // 更新签到状态
+                if (data.is_checked_in) {
+                    setCheckInState(true, data.check_in_days);
+                } else {
+                    btnText.innerHTML = '活着呢';
+                    iconImg.src = '/static/manyi.png';
+                    checkInBtn.classList.remove('checked-in');
+                }
+            } catch (e) {
+                console.error('Failed to load config', e);
+                // 如果获取失败（比如ID无效），可能需要清除本地存储重新登录
+                if (e.status === 404) {
+                    localStorage.removeItem('checkin_user_id');
+                    localStorage.removeItem('checkin_nickname');
+                    currentUserConfig.id = null;
+                }
+            }
+        }
+
+        // 更新UI
+        function updateUI() {
+            // 这里可以处理一些UI初始化
+        }
+
+        function setCheckInState(isChecked, days) {
+            if (isChecked) {
+                iconImg.src = '/static/yqd.png';
+                btnText.innerHTML = `已签到 ${days} 天`;
+                checkInBtn.classList.add('checked-in');
+                checkInBtn.classList.remove('clicked'); // 移除动画类防止重复
+            }
+        }
+
+        // 保存配置
+        async function saveConfig(type) {
+            if (!currentUserConfig.id) {
+                // 如果没有ID，尝试先登录
+                const success = await loginUser(nicknameInput.value.trim());
+                if (!success) return;
+            }
+
+            const newConfig = {
+                user_id: currentUserConfig.id
+            };
+            
+            // 根据类型只发送对应的字段
+            if (type === 'wechat') {
+                 newConfig.wechat_webhook = wechatWebhookInput.value;
+            } else if (type === 'email') {
+                 newConfig.emails = emailInput.value;
+            }
+            
+            try {
+                const res = await fetch('/api/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(newConfig)
+                });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    // 保存成功后，更新本地缓存（仅用于本次会话校验，不持久化敏感数据）
+                    if (type === 'wechat') currentUserConfig.wechat_webhook = newConfig.wechat_webhook;
+                    if (type === 'email') currentUserConfig.emails = newConfig.emails;
+                    alert('保存成功');
+                }
+            } catch (e) {
+                console.error('Save failed', e);
+                alert('保存失败');
+            }
+        }
+
+        // 昵称输入框失焦 -> 登录/切换用户
+        nicknameInput.addEventListener('blur', async () => {
+            const name = nicknameInput.value.trim();
+            if (name && name !== currentUserConfig.nickname) {
+                // 切换用户
+                await loginUser(name);
+            }
+        });
+
+        // 删除用户逻辑
+        deleteUserBtn.addEventListener('click', async () => {
+            if (!currentUserConfig.id) {
+                alert('请先输入姓名登录');
+                return;
+            }
+
+            // 随机选择金句
+            const randomQuote = quotes[Math.floor(Math.random() * quotes.length)];
+            quoteText.textContent = randomQuote;
+            enlightenmentModal.style.display = 'block';
+        });
+
+        // 确认删除逻辑
+        confirmDeleteBtn.addEventListener('click', async () => {
+            try {
+                const res = await fetch('/api/delete_user', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id: currentUserConfig.id })
+                });
+                const data = await res.json();
+                
+                if (data.status === 'success') {
+                    // 清除本地存储
+                    localStorage.removeItem('checkin_user_id');
+                    localStorage.removeItem('checkin_nickname');
+                    
+                    enlightenmentModal.style.display = 'none'; // 关闭弹窗
+                    alert('已删除数据，不再打扰。');
+                    
+                    // 重置页面状态
+                        currentUserConfig = {
+                            id: null,
+                            nickname: '',
+                            wechat_webhook: '',
+                            emails: '',
+                            check_in_days: 0,
+                            is_checked_in: false
+                        };
+                        nicknameInput.value = '';
+                        btnText.innerHTML = '活着呢';
+                        iconImg.src = '/static/manyi.png';
+                        checkInBtn.classList.remove('checked-in');
+                    wechatWebhookInput.value = '';
+                    emailInput.value = '';
+                } else {
+                    alert(data.message);
+                }
+            } catch (e) {
+                console.error('Delete failed', e);
+                alert('删除失败，请检查网络');
+            }
+        });
+
+        // 模态框逻辑
+        wechatBtn.addEventListener('click', () => {
+            if (!currentUserConfig.id) {
+                alert('请先输入姓名');
+                nicknameInput.focus();
+                return;
+            }
+            wechatModal.style.display = 'block';
+        });
+
+        emailBtn.addEventListener('click', () => {
+            if (!currentUserConfig.id) {
+                alert('请先输入姓名');
+                nicknameInput.focus();
+                return;
+            }
+            emailModal.style.display = 'block';
+        });
+
+        closeBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                wechatModal.style.display = 'none';
+                emailModal.style.display = 'none';
+                enlightenmentModal.style.display = 'none';
+            });
+        });
+
+        window.addEventListener('click', (e) => {
+            if (e.target == wechatModal) wechatModal.style.display = 'none';
+            if (e.target == emailModal) emailModal.style.display = 'none';
+            if (e.target == enlightenmentModal) enlightenmentModal.style.display = 'none';
+        });
+
+        saveWechatBtn.addEventListener('click', async () => {
+            await saveConfig('wechat');
+            wechatModal.style.display = 'none';
+        });
+
+        saveEmailBtn.addEventListener('click', async () => {
+            await saveConfig('email');
+            emailModal.style.display = 'none';
+        });
+
+        // 测试通知逻辑
+        async function testNotification(type) {
+            // 先尝试保存当前配置
+            if (!currentUserConfig.id) {
+                alert('请先输入姓名登录');
+                return;
+            }
+            
+            // 简单校验
+            // if (type === 'wechat' && !wechatWebhookInput.value.trim()) {
+            //    alert('请先输入 Webhook 地址');
+            //    return;
+            // }
+            // if (type === 'email' && !emailInput.value.trim()) {
+            //    alert('请先输入邮箱地址');
+            //    return;
+            // }
+
+            // 保存一次，确保后端有最新数据
+            // 注意：因为不再回显，这里如果用户没改，输入框是空的。如果调用 saveConfig 会把空字符串发过去吗？
+            // 我们修改了 saveConfig，只发对应 type 的。
+            // 但如果输入框是空的，意味着用户没填。如果用户没填，我们就不应该保存，而是直接测试（假设后端已有数据）。
+            // 如果用户填了，说明想改，那就先保存。
+            
+            if (type === 'wechat' && wechatWebhookInput.value.trim()) {
+                 await saveConfig('wechat');
+            }
+            if (type === 'email' && emailInput.value.trim()) {
+                 await saveConfig('email');
+            }
+
+            const btn = type === 'wechat' ? testWechatBtn : testEmailBtn;
+            const originalText = btn.textContent;
+            btn.textContent = '发送中...';
+            btn.disabled = true;
+
+            try {
+                const res = await fetch('/api/test_notification', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        user_id: currentUserConfig.id,
+                        type: type
+                    })
+                });
+                const data = await res.json();
+                
+                if (data.status === 'success') {
+                    alert('测试发送成功！请检查收件箱。');
+                } else {
+                    alert('发送失败: ' + data.message);
+                }
+            } catch (e) {
+                console.error('Test failed', e);
+                alert('网络请求失败');
+            } finally {
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        testWechatBtn.addEventListener('click', () => testNotification('wechat'));
+        testEmailBtn.addEventListener('click', () => testNotification('email'));
+
+
+        // 签到逻辑
+        checkInBtn.addEventListener('click', async function() {
+            if (currentUserConfig.is_checked_in) return; 
+
+            // 1. 校验
+            if (!nicknameInput.value.trim()) {
+                alert('请输入您的姓名');
+                nicknameInput.focus();
+                return;
+            }
+            
+            // 确保已登录
+            if (!currentUserConfig.id) {
+                const success = await loginUser(nicknameInput.value.trim());
+                if (!success) return;
+            }
+
+            // 简单的前端校验：至少配置一种通知
+            if (!currentUserConfig.wechat_webhook && !currentUserConfig.emails) {
+                alert('请至少配置一种通知方式（微信或邮件）才能签到');
+                return;
+            }
+
+            // 2. 按钮动画
+            this.classList.add('clicked');
+            
+            // 烟花效果 (如果有)
+            if (window.Fireworks) {
+                 window.Fireworks.launchPair();
+            }
+
+            // 3. 调用后端
+            try {
+                // 确保最新配置已保存
+                // await saveConfig(); // 此时应该已经保存过了，或者loginUser已经处理了
+                
+                const res = await fetch('/api/check_in', { 
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id: currentUserConfig.id })
+                });
+                const data = await res.json();
+                
+                if (data.status === 'success') {
+                    // 延迟一点显示成功状态
+                    setTimeout(() => {
+                        currentUserConfig.is_checked_in = true;
+                        currentUserConfig.check_in_days = data.days;
+                        setCheckInState(true, data.days);
+                    }, 300);
+                } else {
+                    alert(data.message);
+                    this.classList.remove('clicked');
+                }
+            } catch (e) {
+                console.error('Check in failed', e);
+                alert('签到失败，请检查网络');
+                this.classList.remove('clicked');
+            }
+        });
+
+        // 注册 Service Worker
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(registration => {
+                        console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                    })
+                    .catch(err => {
+                        console.log('ServiceWorker registration failed: ', err);
+                    });
+            });
+        }
+    </script>
+</body>
+</html>
