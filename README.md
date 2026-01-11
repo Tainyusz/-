@@ -9,7 +9,7 @@
 - 微信通知和邮件通知
 - 支持多邮箱 多个企业微信链接通知
 - 自动清理长期未活跃用户数据
-![8aa9fff39401026fd3e5d6ba1e426321](https://github.com/user-attachments/assets/a4bc0c26-7227-4b40-a339-1b357af9a808)
+#### ![8aa9fff39401026fd3e5d6ba1e426321](https://github.com/user-attachments/assets/a4bc0c26-7227-4b40-a339-1b357af9a808)
 
 ## 部署方式
 
